@@ -16,11 +16,12 @@ from sklearn.preprocessing import StandardScaler
 from functions import print_accuracies, print_confusion_matrix
 
 # Scikit-Learn and helper functions
-from sklearn.model_selection import train_test_split, GridSearchCV, cross_val_score
+from sklearn.model_selection import train_test_split, GridSearchCV, RandomizedSearchCV, cross_val_score
 from sklearn.svm import SVC
 from sklearn.neural_network import MLPClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
+
 
 
 
@@ -126,29 +127,56 @@ y_pred_val_best_svc = svc_model.predict(X_val_scaled)
 # print(best_svc.best_score_)
 
 mlp_model = MLPClassifier(
-    max_iter=2000,
+    max_iter=10000,
     random_state=67
 )
 
 param_grid_mlp = {
-    'hidden_layer_sizes': [(50,), (100,), (50,50)],   # number of neurons in layers
-    'activation': ['relu', 'tanh'],                   # activation function
-    'solver': ['adam', 'sgd'],                        # optimization algorithm
-    'alpha': [0.0001, 0.001, 0.01],                  # L2 regularization
-    'learning_rate': ['constant', 'adaptive']         # learning rate schedule
+    'hidden_layer_sizes': [
+        (128, 128, 64),
+        (256, 128, 64),
+        (128, 256, 128),
+        (256, 256, 128),
+        (128, 256, 128, 64),
+        (256, 256, 128, 64)
+    ],
+    'activation': ['relu', 'tanh'],
+    'solver': ['adam'],
+    'alpha': np.logspace(-5, -2, 5),  # 1e-5, 1e-4, 1e-3, 1e-2
+    'learning_rate': ['constant', 'adaptive'],
+    'learning_rate_init': [0.001, 0.01]
 }
+
 grid_mlp = GridSearchCV(
-    estimator=mlp_model,
+    estimator=MLPClassifier(max_iter=5000, random_state=67),
     param_grid=param_grid_mlp,
     scoring='accuracy',
     cv=5,
-    n_jobs=-1  # parallelize search
+    n_jobs=-1,
+    verbose=2
 )
 grid_mlp.fit(X_train_scaled, y_train)
 y_pred_val_mlp = grid_mlp.predict(X_val_scaled)
 
 print("Best MLP Parameters:", grid_mlp.best_params_)
 print("Best MLP CV Accuracy:", grid_mlp.best_score_)
+
+import xgboost as xgb
+from sklearn.model_selection import RandomizedSearchCV
+
+xgb_clf = xgb.XGBClassifier(use_label_encoder=False, eval_metric='logloss', random_state=67)
+param_dist = {
+  'n_estimators':[100,200,500],
+  'max_depth':[3,5,7,9],
+  'learning_rate':[0.01,0.05,0.1],
+  'subsample':[0.6,0.8,1.0],
+  'colsample_bytree':[0.6,0.8,1.0]
+}
+rand_xgb = RandomizedSearchCV(xgb_clf, param_dist, n_iter=25, cv=5, scoring='accuracy', n_jobs=-1, verbose=2)
+rand_xgb.fit(X_train, y_train)
+
+print("Best XGB Parameters:", rand_xgb.best_params_)
+print("Best XGB CV Accuracy:", rand_xgb.best_score_)
 
 # from sklearn.metrics import accuracy_score
 # val_acc = accuracy_score(y_val, y_pred_val)
