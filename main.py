@@ -8,7 +8,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 # Functions for data preprocessing 
-from functions import prepare_data, get_salient_region, create_feature_columns, int2string
+from functions import prepare_data, get_salient_region, create_feature_columns, int2string, add_salient_region, process_wafer_map
 from sklearn.preprocessing import StandardScaler
 
 
@@ -126,111 +126,96 @@ y_pred_val_best_svc = svc_model.predict(X_val_scaled)
 # print(best_svc.best_params_)
 # print(best_svc.best_score_)
 
+
+# param_grid_mlp = {
+#     'hidden_layer_sizes': [
+#         (128, 128, 64),
+#         (256, 128, 64),
+#         (128, 256, 128),
+#         (256, 256, 128),
+#         (128, 256, 128, 64),
+#         (256, 256, 128, 64)
+#     ],
+#     'activation': ['relu', 'tanh'],
+#     'solver': ['adam'],
+#     'alpha': np.logspace(-5, -2, 5),  # 1e-5, 1e-4, 1e-3, 1e-2
+#     'learning_rate': ['constant', 'adaptive'],
+#     'learning_rate_init': [0.001, 0.01]
+# }
+# 
+# grid_mlp = GridSearchCV(
+#     estimator=MLPClassifier(max_iter=5000, random_state=67),
+#     param_grid=param_grid_mlp,
+#     scoring='accuracy',
+#     cv=5,
+#     n_jobs=-1,
+#     verbose=2
+# )
+
 mlp_model = MLPClassifier(
     max_iter=10000,
-    random_state=67
+    random_state=67,
+    hidden_layer_sizes=(128, 128, 64),
+    activation='relu',
+    solver='adam',
+    alpha=0.00001,
+    learning_rate='constant',
+    learning_rate_init=0.001
 )
 
-param_grid_mlp = {
-    'hidden_layer_sizes': [
-        (128, 128, 64),
-        (256, 128, 64),
-        (128, 256, 128),
-        (256, 256, 128),
-        (128, 256, 128, 64),
-        (256, 256, 128, 64)
-    ],
-    'activation': ['relu', 'tanh'],
-    'solver': ['adam'],
-    'alpha': np.logspace(-5, -2, 5),  # 1e-5, 1e-4, 1e-3, 1e-2
-    'learning_rate': ['constant', 'adaptive'],
-    'learning_rate_init': [0.001, 0.01]
-}
+# grid_mlp.fit(X_train_scaled, y_train)
+mlp_model.fit(X_train_scaled, y_train)
+y_pred_val_mlp = mlp_model.predict(X_val_scaled)
 
-grid_mlp = GridSearchCV(
-    estimator=MLPClassifier(max_iter=5000, random_state=67),
-    param_grid=param_grid_mlp,
-    scoring='accuracy',
-    cv=5,
-    n_jobs=-1,
-    verbose=2
+# print("Best MLP Parameters:", grid_mlp.best_params_)
+# print("Best MLP CV Accuracy:", grid_mlp.best_score_)
+
+from sklearn.ensemble import VotingClassifier
+
+ensemble = VotingClassifier(
+    estimators=[('rf', rf_model), ('svc', svc_model), ('mlp', mlp_model)],
+    voting='soft'
 )
-grid_mlp.fit(X_train_scaled, y_train)
-y_pred_val_mlp = grid_mlp.predict(X_val_scaled)
+ensemble.fit(X_train_scaled, y_train)
+cv_scores_ensemble = cross_val_score(ensemble, X_train_scaled, y_train, cv=10)
+print(f"Ensemble CV Accuracy: {cv_scores_ensemble.mean():.4f}")
 
-print("Best MLP Parameters:", grid_mlp.best_params_)
-print("Best MLP CV Accuracy:", grid_mlp.best_score_)
-
-import xgboost as xgb
-from sklearn.model_selection import RandomizedSearchCV
-
-xgb_clf = xgb.XGBClassifier(use_label_encoder=False, eval_metric='logloss', random_state=67)
-param_dist = {
-  'n_estimators':[100,200,500],
-  'max_depth':[3,5,7,9],
-  'learning_rate':[0.01,0.05,0.1],
-  'subsample':[0.6,0.8,1.0],
-  'colsample_bytree':[0.6,0.8,1.0]
-}
-rand_xgb = RandomizedSearchCV(xgb_clf, param_dist, n_iter=25, cv=5, scoring='accuracy', n_jobs=-1, verbose=2)
-rand_xgb.fit(X_train, y_train)
-
-print("Best XGB Parameters:", rand_xgb.best_params_)
-print("Best XGB CV Accuracy:", rand_xgb.best_score_)
-
-# from sklearn.metrics import accuracy_score
-# val_acc = accuracy_score(y_val, y_pred_val)
-# print(f"Validation Accuracy: {val_acc:.4f}")
-# cv_scores = cross_val_score(mlp, X_train_scaled, y_train, cv=10)
-# print(f"10-Fold CV Mean Accuracy: {cv_scores.mean():.4f}")
-
-#from sklearn.ensemble import VotingClassifier
-#
-#ensemble = VotingClassifier(
-#    estimators=[('rf', rf_model), ('svc', svc_model)],
-#    voting='soft'
-#)
-#ensemble.fit(X_train_scaled, y_train)
-#cv_scores_ensemble = cross_val_score(ensemble, X_train_scaled, y_train, cv=10)
-#print(f"Ensemble CV Accuracy: {cv_scores_ensemble.mean():.4f}")
-
-
-predictions = {
-    "SVC": y_pred_val_best_svc,
-    "Random Forest": y_pred_val_rf,
-    "MLP": y_pred_val_mlp
-}
-
-accuracies = functions.evaluate_models(predictions, y_val)
-print("Accuracies:", accuracies)
-
-best = functions.find_best_model(accuracies)
-print("Best model:", best)
-
-rf_scores = cross_val_score(rf_model, X, y, cv=10)
-svc_scores = cross_val_score(svc_model, X, y, cv=10)
-mlp_scores = cross_val_score(mlp_model, X, y, cv=10)
-print(f"Random Forest: {rf_scores.mean()}")
-print(f"SVC: {svc_scores.mean()}")
-print(f"MLP: {mlp_scores.mean()}")
-
-
-
-# test_data = np.load('data/wafermap_test.npy', allow_pickle = True)
-# df_test = pd.DataFrame(test_data)
-# df_test_prepped = prepare_data(df_test)
-# df_test_prepped['salientRegion'] = df_test_prepped.apply(get_salient_region, axis=1)
-# df_test_final = create_feature_columns(df_test_prepped)
-# df_test_final_features = df_test_final[feature_columns]
+# predictions = {
+#     "SVC": y_pred_val_best_svc,
+#     "Random Forest": y_pred_val_rf,
+#     "MLP": y_pred_val_mlp
+# }
 # 
-# rf_predictions = rf_model.predict(df_test_final_features)
-# svc_predictions = svc_model.predict(df_test_final_features)
+# accuracies = functions.evaluate_models(predictions, y_val)
+# print("Accuracies:", accuracies)
 # 
+# best = functions.find_best_model(accuracies)
+# print("Best model:", best)
+
+# rf_scores = cross_val_score(rf_model, X, y, cv=10)
+# svc_scores = cross_val_score(svc_model, X, y, cv=10)
+# mlp_scores = cross_val_score(mlp_model, X, y, cv=10)
+# print(f"Random Forest: {rf_scores.mean()}")
+# print(f"SVC: {svc_scores.mean()}")
+# print(f"MLP: {mlp_scores.mean()}")
+
+print("----- Test Dataset Predictions -----")
+
+test_data = np.load('data/wafermap_test.npy', allow_pickle = True)
+df_test = pd.DataFrame(test_data)
+df_test = process_wafer_map(df_test)
+df_test = add_salient_region(df_test)
+df_test = create_feature_columns(df_test)
+test_X_scaled = scaler.transform(df_test[feature_columns])
+
+#rf_predictions = rf_model.predict(df_test_final_features)
+ensemble_predictions = ensemble.predict(test_X_scaled)
+
 # rf_predictions_labels = [int2string[pred] for pred in rf_predictions]
-# svc_predictions_labels = [int2string[pred] for pred in svc_predictions]
-# 
+ensemble_predictions_labels = [int2string[pred] for pred in ensemble_predictions]
+
 # rf_series = pd.Series(rf_predictions_labels, name='failureType')
-# svc_series = pd.Series(svc_predictions_labels, name='failureType')
-# 
-# rf_series.to_csv('dt_scores.csv', index=False)   # header included automatically
-# svc_series.to_csv('svc_scores.csv', index=False)
+ensemble_series = pd.Series(ensemble_predictions_labels, name='failureType')
+
+# rf_series.to_csv('rf_scores.csv', index=False)   # header included automatically
+ensemble_series.to_csv('scores.csv', index=False)

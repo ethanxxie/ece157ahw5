@@ -70,6 +70,15 @@ def prepare_data(df: pd.DataFrame, has_labels: bool=True) -> Tuple[np.ndarray, l
 
     return processed_data
 
+# process_wafer_map(): processes the wafer maps in the dataframe by resizing them to 64 x 64
+def process_wafer_map(df):
+    df['reshapedMap'] = df['waferMap'].apply(resize_wafer_map)
+    return df
+
+# add_salient_region(): adds a column for the salient region to the dataframe
+def add_salient_region(df):
+    df['salientRegion'] = df.apply(get_salient_region, axis=1)
+    return df
 
 # output_all_wafer_maps(): outputs all wafer maps to corresponding failure type directories
 def output_all_wafer_maps(df: pd.DataFrame) -> None:
