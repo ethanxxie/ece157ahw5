@@ -1,0 +1,20 @@
+# Ignore data directories and large binary files
+Center/
+data/
+Donut/
+Edge-Loc/
+Near-full/
+Scratch/
+*.npy
+
+# Ignore Python cache and virtual environments
+__pycache__/
+venv/
+.venv/
+env/
+.env/
+
+# Ignore IDE files
+.vscode/
+.idea/
+.DS_Store
